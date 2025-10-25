@@ -1,0 +1,50 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  font-size: 18px;
+}
+canvas {
+  display: block;
+  border: none;
+  outline: none;
+}
+#level-up-text {
+  color: pink;
+  font-size: 48px;
+  font-weight: bold;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1000;
+  font-family: sans-serif;
+}
+#score-text {
+  position: absolute;
+  top: 20px;
+  left: 540px; /* canvas is 500px wide + 20px padding */
+  font-size: 16px;
+  font-family: sans-serif;
+}
+#level-text {
+  position: absolute;
+  top: 50px;
+  left: 540px;
+  font-size: 16px;
+}
+#cones-text{
+  position: absolute;
+  top: 80px;
+  left: 540px;
+  font-size: 16px;
+}
+#game-over-text{
+  color: lightblue;
+  font-size: 48px;
+  font-weight: bold;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1000;
+  font-family: sans-serif;
+}
+#instructions-text{
+  font-size: 14px;
+}

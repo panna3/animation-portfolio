@@ -1,0 +1,14 @@
+html, body {
+  margin: 0;
+  padding: 0;
+}
+canvas {
+  display: block;
+}
+button{
+  color: rgb(255,119,142);
+  background-color:rgb(208,235,243);
+  border-radius: 5px;
+  border-color: rgb(208,235,243);
+  
+}
