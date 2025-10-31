@@ -25,8 +25,8 @@ class WobbleCircle{
     beginShape();
      for (let i= 0; i<TWO_PI+0.5;i+=stepW){
        let r = this.r + sin(wobble + i * 3) * 5;
-       let tx = this.x + cos(angle+i)*(r+radius)*(1 + this.stretch.x / 50);
-       let ty = this.y + sin(angle+i)*(r+radius)*(1 + this.stretch.y / 50);
+       let tx = this.x + cos(angle+i)*(r+radius)*(1 + abs(this.stretch.x) / 50);
+       let ty = this.y + sin(angle+i)*(r+radius)*(1 + abs(this.stretch.y) / 50);
              
 
        stroke('white');
