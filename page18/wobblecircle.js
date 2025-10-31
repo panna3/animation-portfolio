@@ -38,8 +38,11 @@ class WobbleCircle{
     if(mouseIsPressed){
       this.v1.set(pmouseX,pmouseY);
       this.v2.set(mouseX,mouseY);
-      let targetStretch = this.stretch = p5.Vector.sub(this.v2,this.v1).mult(3);
+      let targetStretch = p5.Vector.sub(this.v2,this.v1).mult(3);
       this.stretch.lerp(targetStretch, 0.3);
+      if (this.stretch.dist(targetStretch) < 0.5) {
+        this.stretch = targetStretch.copy();
+      }
     }else {
       this.stretch.lerp(createVector(0, 0), 0.1);
     }
