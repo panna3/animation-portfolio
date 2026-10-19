@@ -1,0 +1,547 @@
+<title>Moonlit River</title>
+<style>
+/* Layout: the illustration fills the screen as one square stage; two quiet controls sit under it */
+:root { color-scheme: light; --bg: #CFE8E5; --ink: #2F5E5C; --btn: #FFFFFFCC; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+       display: grid; place-items: center; padding-inline: 16px; padding-block: 16px; }
+.stage { display: grid; gap: 12px; justify-items: center; width: 100%; }
+canvas { width: min(100%, calc(100vh - 90px)); max-width: 100%; aspect-ratio: 1212 / 1216; height: auto;
+         border-radius: 14px; box-shadow: 0 10px 40px #2F5E5C33; display: block; background: #B4E0DD; }
+.controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+button { font: inherit; font-size: 14px; border: 1px solid #2F5E5C55; background: var(--btn); color: var(--ink);
+         padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+</style>
+
+<div class="stage">
+  <canvas id="c" width="1212" height="1216" aria-label="Animated illustration: a small white dog on a rock floats down a river of moonlight, with twinkling sparkles and drifting mist"></canvas>
+  <div class="controls">
+    <button id="replay">もう一度流す</button>
+    <button id="toggle">一時停止</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const hcv = document.createElement('canvas'); hcv.width = W; hcv.height = H;   // the drifting haze is drawn here first
+  const hctx = hcv.getContext('2d');
+  const load = src => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = src; });
+
+  // Positions are in the illustration's own pixels (1212 x 1216)
+  const PARTS = {"dog":{"x":773,"y":700,"w":132,"h":87},"glow":{"x":609,"y":0},"moon":[[948,43],[752,62],[934,58],[900,195],[926,97],[870,161],[830,133],[848,116],[875,31],[716,93],[799,255],[809,222],[686,350],[810,204],[837,267],[718,331],[721,141],[900,31],[810,26],[765,198],[829,284],[863,167],[885,210],[764,249],[924,95],[819,101],[912,126],[801,124],[909,23],[726,101],[870,171],[914,99],[784,83],[682,353],[690,353],[899,194],[797,103],[786,268],[767,241],[796,198],[850,190],[833,196],[803,268],[788,94],[889,227],[836,281],[904,132],[804,309],[786,146],[724,322],[726,328],[868,190],[734,276],[784,281],[825,188],[823,277],[722,306],[877,120],[807,171],[832,96],[987,140],[696,299],[826,162],[943,158],[691,337],[707,345],[896,233],[895,163],[881,114],[779,308],[707,357],[761,200],[963,53],[751,182],[829,11],[839,107],[746,69],[768,45],[865,39],[807,143],[890,122],[760,69],[758,83],[967,139],[839,130],[925,115],[738,46],[820,248],[787,29],[747,44],[894,196],[790,195],[991,98],[851,132],[854,23],[935,57],[824,73],[929,49],[916,24],[911,34],[913,21],[782,205],[783,135],[769,79],[842,92],[745,104],[845,3],[829,215],[779,36],[931,131],[970,89],[950,31],[869,6],[916,183],[828,72],[909,149],[791,179],[760,308],[852,28],[902,161],[873,270],[901,37],[718,139],[853,229],[947,90],[853,291],[747,122],[729,63],[802,166],[759,67],[767,24],[764,270],[736,79],[884,221],[763,306],[814,173],[850,86],[895,181],[940,136],[726,138],[848,245],[860,19],[712,85],[745,44],[718,134],[799,30],[706,81],[786,94],[838,98],[773,64],[874,274],[939,124],[727,347],[929,28],[791,131],[739,125],[817,267],[724,53],[725,133],[868,56],[791,123],[739,195],[904,135],[833,248],[738,146],[844,7],[931,89],[844,31],[878,214],[871,235],[960,93],[851,71],[680,358],[791,60],[924,128],[741,67],[738,66],[918,20],[786,103],[922,124],[899,68],[908,118],[798,24],[765,284],[781,275],[847,162],[883,210],[879,116],[881,115],[750,258],[877,250],[706,356],[948,21],[942,40],[766,244],[716,103],[772,63],[725,299],[877,199],[876,20],[993,74],[746,200],[864,151],[832,204],[888,161],[820,20],[892,238],[920,66],[872,68],[813,160],[850,110],[893,17],[771,273],[930,45],[832,237],[751,305],[779,283],[937,114],[755,53],[801,8],[949,148],[759,24],[757,205],[800,160],[866,54],[839,119],[740,310],[964,107],[895,73],[821,205],[881,220],[764,283],[884,84],[819,184],[856,223],[832,76],[875,134],[837,76],[709,77],[879,56],[839,177],[792,220],[821,116],[923,68],[828,24],[812,289],[781,36],[709,322],[766,152],[803,193],[730,278],[830,85],[857,206],[813,141],[787,303],[823,296],[890,244],[727,312],[811,155],[807,223],[935,124],[748,92],[764,308],[980,136],[850,252],[859,58],[783,64],[916,51],[783,192],[949,100],[908,87],[895,242],[847,49],[839,59],[906,32],[864,79],[761,155],[876,219],[945,124],[795,174],[814,262],[775,99],[778,150],[969,71],[991,91],[777,249],[810,64],[930,173],[733,132],[989,135],[989,97],[896,92],[775,281],[998,125],[861,231],[750,194],[972,86],[761,286],[815,264],[867,27]]};                 // where the dog cutout and the moon glow sit, and points inside the moon
+  const RIVER = [[504,660],[942,1008],[792,1176],[318,1164],[666,1146],[582,600],[942,738],[522,648],[900,948],[1044,1140],[1008,906],[1116,924],[1050,1068],[918,846],[510,1158],[612,708],[504,630],[870,942],[522,558],[378,1194],[1092,1170],[1086,852],[1188,888],[888,1038],[1110,1140],[834,1146],[414,444],[1110,1098],[1140,900],[732,750],[1026,1116],[294,1164],[654,720],[894,1026],[354,1212],[546,636],[774,1194],[1002,792],[630,558],[600,546],[570,552],[954,1068],[1056,984],[576,516],[888,1206],[672,1188],[996,846],[1074,1092],[960,708],[996,882],[780,1122],[552,558],[1092,972],[744,714],[1104,894],[918,948],[894,996],[924,720],[954,816],[756,720],[1032,1086],[600,714],[1170,912],[696,1212],[1056,768],[264,1206],[558,546],[1038,876],[306,1176],[624,1200],[1068,996],[912,1200],[1002,1062],[810,630],[816,690],[1176,1050],[1134,1116],[516,1182],[1056,774],[672,648],[666,1134],[1032,804],[486,1194],[972,1110],[1164,948],[756,1206],[1164,954],[810,1170],[324,1200],[1146,1080],[546,696],[1044,780],[1104,762],[1104,1020],[732,1188],[1092,948],[732,1176],[972,1206],[1044,954],[924,858],[1176,1020],[1080,1176],[624,564],[1176,930],[1032,726],[696,1134],[936,1158],[1122,864],[948,876],[870,1080],[654,684],[996,834],[1056,990],[744,1188],[1020,1104],[708,1152],[918,1086],[912,1128],[1026,840],[486,624],[1152,894],[822,1080],[24,960],[828,636],[840,1152],[642,678],[1110,966],[420,1176],[918,858],[1164,834],[960,942],[1116,1122],[582,558],[972,924],[636,576],[930,786],[1038,1104],[834,1176],[858,1044],[996,1026],[1014,1014],[936,858],[834,1068],[522,684],[882,678],[894,954],[1026,714],[540,528],[1002,1146],[564,702],[966,984],[810,1200],[534,1182],[1032,990],[876,720],[1134,864],[1104,960],[864,816],[708,1212],[996,1014],[990,822],[1146,912],[300,1200],[996,750],[1020,1074],[1020,990],[960,1038],[936,1212],[954,1122],[534,504],[1122,846],[1092,1152],[372,1182],[342,1170],[816,1212],[912,1188],[852,1206],[1026,1128],[1044,960],[654,1164],[672,654],[1002,966],[786,1152],[930,1002],[858,702],[858,888],[576,1212],[516,594],[882,936],[1014,1182],[876,834],[984,1008],[966,996],[582,702],[978,1206],[1014,954],[900,876],[1068,936],[858,1164],[828,828],[978,816],[222,444],[912,984],[990,984],[888,1050],[396,1158],[1134,1038],[954,804],[1098,912],[906,1032],[504,558],[432,1164],[690,720],[1062,1056],[858,684],[1152,990],[942,1020],[564,690],[570,1182],[744,624],[984,1158],[1170,990],[918,1158],[978,1176],[1014,1164],[486,1206],[954,738],[522,564],[510,1176],[270,1212],[852,1086],[660,606],[654,618],[918,1182],[498,540],[1176,906],[528,534],[708,1140],[780,1140],[960,762],[1014,732],[966,750],[516,642],[930,1158],[954,1050],[756,690],[894,816],[1086,768],[612,606],[822,678],[882,672],[948,738],[1080,972],[684,1212],[858,678],[894,1074],[750,756],[888,1068],[990,1110],[960,774],[924,912],[996,1104],[864,798],[954,948],[1194,924],[750,642],[474,552],[1098,786],[924,852],[840,816],[942,882],[876,1158],[924,690],[666,744],[480,642],[750,738],[696,1194],[990,1122],[924,960],[570,708],[84,1038],[1134,888],[1044,1164],[516,546],[948,714],[558,540],[1116,858],[672,666],[762,564],[894,1116],[912,672],[1152,900],[1098,1104],[1092,954],[1098,1086],[888,888],[858,990],[918,1170],[690,714],[840,1056],[954,1158],[1062,1098],[894,966],[1074,906],[816,714],[906,972],[900,1068],[636,558],[1002,858],[936,1086],[900,1014],[372,1164],[828,798],[1050,1074],[846,1056],[870,888],[648,594],[876,1128],[792,780],[498,654],[720,708],[390,1188],[600,582],[822,786],[672,606],[444,1182],[642,612],[1020,786],[666,1200],[894,1206],[756,780],[702,1134],[816,672],[1104,1002],[696,738],[732,654],[534,516],[900,1002],[546,1188],[942,1176],[576,570],[870,1026],[288,1170],[1008,708],[744,1194],[996,1008],[894,918],[582,684],[708,1170],[900,1182],[1008,1182],[912,1152],[1068,1104],[864,1050],[864,960],[552,570],[840,846],[606,702],[1020,816],[762,630],[870,702],[1152,1008],[900,1086],[534,1194],[858,894],[906,1026],[756,696],[1092,942],[654,636],[828,1206],[930,1080],[1098,852],[1038,774],[984,954],[1116,948],[522,540],[1032,798],[1116,1038],[198,1188],[1026,864],[690,1194],[966,762],[570,540],[750,672],[630,702],[396,1182],[786,804],[750,1164],[1026,1002],[1044,1152],[546,660],[990,810],[1014,888],[768,708],[744,750],[630,630],[312,1176],[900,846],[546,1206],[1002,990],[534,1200],[726,1188],[1104,1092],[1068,978],[1050,936],[876,1146],[978,978],[1002,720],[696,600],[762,1122],[480,576],[726,618],[858,654],[936,678],[780,678],[360,1200],[900,984],[762,708],[936,750],[954,1140],[1008,804],[918,1032],[1074,954],[480,1176],[1044,834],[978,810],[1050,810],[738,642],[744,774],[1026,720],[882,1182],[294,1212],[1104,1032],[888,1152],[798,1212],[714,1116],[966,1188],[918,942],[552,660],[1104,1014],[1176,990],[984,1146],[648,636],[804,798],[636,570],[900,870],[480,612],[948,846],[822,1182],[480,1158],[714,666],[738,1170],[876,648],[1080,810],[774,642],[876,1044],[1098,1020],[1008,1152],[252,1206],[648,612],[1020,1008],[1128,990],[864,714],[1158,1002],[582,618],[756,750],[888,834],[252,1194],[1014,774],[1080,1002],[1062,978],[198,1206],[756,642],[1080,912],[546,1194],[1074,756],[816,636],[426,1158],[516,582],[702,1170],[1020,774],[546,528],[804,1044],[1152,1080],[750,624],[906,876],[792,642],[618,1170],[858,1188],[564,1158],[462,576],[918,690],[798,726],[348,1158],[1068,1020],[558,678],[816,642],[798,1092],[966,726],[852,672],[708,1134],[672,1176],[576,636],[966,894],[348,1200],[852,846],[522,1164],[1128,984],[276,1200],[1104,1164],[936,774],[744,738],[1014,930],[858,792],[816,630],[960,702],[1074,1068],[660,570],[468,558],[546,522],[414,1158],[222,1206],[810,1122],[1164,1026],[780,798],[1026,906],[1158,852],[798,792],[1176,858],[576,600],[636,600],[480,1200],[996,792],[984,1032],[984,912],[612,642],[1038,732],[888,708],[330,1158],[1008,1044],[810,1152],[270,1194],[894,1182],[1158,1092],[954,924],[1146,1074],[1110,822],[702,744],[684,690],[1062,984],[972,702],[870,786],[546,702],[762,732],[1008,828],[564,618],[318,1170],[942,762],[636,624],[666,1140],[930,906],[690,624],[828,1014],[1062,1062],[984,810],[966,1206],[588,720],[1116,852],[846,786],[516,576],[1122,798],[864,690],[966,792],[708,1158],[774,1176],[1056,1014],[384,1194],[870,1200],[1014,780],[732,732],[1110,804],[480,636],[1194,984],[1080,1038],[576,1164],[1134,1026],[768,624],[696,732],[666,714],[492,546],[612,1164],[630,732],[1002,864],[222,612],[678,606],[942,1122],[576,612],[1068,1056],[516,522],[1110,768],[1038,1134],[678,1158],[948,828],[1134,942],[948,924],[648,1182],[474,1182],[618,672],[1194,948],[804,1152],[816,1158],[804,804],[672,612],[882,960],[552,1212],[894,1080],[666,684],[0,690],[726,1152],[828,666],[858,660],[396,1170],[792,1182],[1116,792],[786,786],[774,636],[876,1110],[1134,960],[1038,1170],[774,1200],[1002,1032],[912,774],[528,654],[396,1194],[918,702],[864,660],[894,990],[336,1200],[1080,1116],[492,564],[900,1152],[936,792],[366,1170],[858,1194],[396,1164],[804,1086],[1056,1194],[462,1176],[264,1212],[816,1134],[798,1098],[852,702],[906,684],[804,780],[1182,888],[864,984],[798,672],[654,582],[1146,1110],[624,1182],[1020,1080],[900,732],[708,738],[648,600],[858,1092],[870,906],[1056,888],[1080,990],[1044,732],[1050,984],[1176,894],[888,984],[1194,906],[570,522],[1038,858],[240,1176],[972,810],[648,744],[1110,936],[510,552],[720,1158],[798,1068],[570,1206],[1062,876],[1014,1008],[606,540],[546,600],[900,1098],[1068,822],[696,660],[1014,1026],[474,654],[708,660],[756,1170],[1062,756],[1140,858],[1062,1002],[966,864],[612,684],[630,624],[948,720],[1122,936],[558,510],[876,684],[1146,972],[990,792],[1170,948],[360,1194],[918,1068],[828,1200],[1122,894],[444,1206],[846,1062],[1050,1122],[966,714],[732,726],[780,792],[882,948],[1098,1092],[1104,930],[906,1212],[930,714],[1050,1110],[1182,870],[888,810],[882,1002],[1074,1038],[1044,1194],[894,1122],[690,1200],[1140,1068],[978,756],[630,714],[636,582],[882,1200],[714,606],[642,1146],[1002,960],[1152,1062],[480,1188],[1074,834],[876,672],[780,1146],[690,1158],[756,1188],[774,702],[1092,786],[798,780],[942,1098],[858,780],[864,1176],[864,996],[876,840],[714,678],[930,1104],[822,1128],[1086,918],[1062,1026],[744,618],[336,1182],[786,648],[822,1038],[1116,960],[1044,1008],[1152,840],[816,684],[696,672],[1062,732],[1014,1206],[960,1008],[930,1116],[888,1140],[1026,1152],[588,588],[834,1092],[810,1116],[1146,1056],[1068,816],[1134,846],[1170,960],[696,1176],[696,678],[978,1122],[498,576],[924,972],[684,624],[594,1164],[1134,1050],[486,636],[912,750],[846,1128],[456,1200],[678,618],[738,660],[960,1044],[522,1176],[1044,1074],[1080,1092],[888,1104],[594,618],[1122,900],[966,1176],[1014,1200],[948,726],[1056,846],[930,1206],[336,1164],[870,1194],[690,678],[318,1200],[1038,798],[1116,894],[834,1050],[258,1200],[876,942],[714,708],[588,648],[1110,888],[942,1032],[1050,978],[984,870],[534,648],[1080,1074],[1008,774],[1098,756],[948,732],[882,846],[984,1134],[834,1002],[564,480],[1128,972],[1146,894],[528,546],[648,558],[1086,1050],[1008,726],[1074,1170],[768,744],[912,702],[648,684],[732,768],[768,666],[1098,984],[612,702],[768,756],[1056,786],[1008,1020],[870,1140],[624,738],[924,1170],[930,1092],[1188,900],[624,1158],[582,1182],[630,1164],[276,1182],[852,678],[888,990],[840,828],[1014,942],[894,882],[306,1182],[714,648],[930,1146],[564,708],[1008,1008],[558,1188],[1098,846],[822,702],[1098,762],[726,1164],[834,636],[900,1194],[498,552],[948,1008],[870,1134],[588,528],[882,990],[888,1086],[1050,1140],[702,1122],[942,1068],[612,660],[1146,948],[978,840],[1110,1008],[474,1164],[1062,786],[1068,894],[930,954],[1056,1086],[834,828],[930,1140],[948,798],[216,438],[816,648],[990,900],[852,1116],[834,822],[1110,780]];                 // points on the blue water, measured from the picture
+  const SPIN = {"crew":{"w":195,"h":129},"boat":{"x":0,"y":17},"big":{"x":35,"y":0,"w":70,"h":86},"pup":{"x":98,"y":33,"w":48,"h":57}};                   // where the boat, its front rim and each dog sit inside the boat picture
+  const MOON = { x: 858, y: 158 };
+  const DOG_HOME = { x: PARTS.dog.x + PARTS.dog.w / 2, y: PARTS.dog.y + PARTS.dog.h / 2 };
+
+  // Light flows out of the moon, down the bright strand and along the river, bending around the rock
+  // 道の中心（左右の白い岸の真ん中）を絵から1行ずつ測った点
+  const ROAD = [[790,262],[770,288],[760,300],[744,310],[722,320],[710,330],[704,340],[703,350],[706,360],[711,370],[718,380],
+                [728,390],[741,400],[754,410],[764,420],[756,430],[736,440],[712,450],[688,460],[666,470],[644,480],[622,490],
+                [604,500],[589,510],[578,520],[568,530],[562,540],[560,550],[560,560],[563,570],[568,580],[588,600],[617,620]];
+  const LIGHT_PATH = [[858,160],...ROAD,[641,632],[688,656],
+                [740,676],[820,696],[880,722],[935,756],[972,786],[994,816],[1010,848],[1020,872],[1028,900],[1029,920],
+                [1019,944],[1012,970],[994,992],[972,1040],[941,1088],[921,1112],[890,1136],[820,1166],[720,1190]];
+  // The dog floats from upstream, past where it sits in the picture, all the way down and out of the frame
+  // Starts far away inside the moonlight, tiny, and comes down the bright strand into the river
+  const DOG_PATH = [[830,205],...ROAD,[641,632],[700,664],[760,700],[808,728],[DOG_HOME.x, DOG_HOME.y],
+                    [905,780],[960,826],[996,876],[1008,926],[996,976],[972,1030],[940,1084],[896,1130],[820,1166],[700,1176],[560,1172],[400,1164]];
+  // ↑ 最後は左下の水たまりで止まる
+
+  function makePath(pts) {
+    const seg = [], lens = [0];
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(l); lens.push(lens[i - 1] + l); }
+    const total = lens[lens.length - 1];
+    return s => {                       // s: 0..1 -> {x, y, a}
+      const d = Math.max(0, Math.min(1, s)) * total; let i = 1; while (i < lens.length - 1 && lens[i] < d) i++;
+      const [ax, ay] = pts[i - 1], [bx, by] = pts[i], f = (d - lens[i - 1]) / seg[i - 1];
+      return { x: ax + (bx - ax) * f, y: ay + (by - ay) * f, a: Math.atan2(by - ay, bx - ax) };
+    };
+  }
+  const lightAt = makePath(LIGHT_PATH), dogAt = makePath(DOG_PATH);
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const motes = Array.from({ length: 46 }, () => ({ s: Math.random(), v: rnd(0.018, 0.034), off: rnd(-14, 14), ph: rnd(0, 6.3), r: rnd(1.6, 3.6) }));
+  const dust = Array.from({ length: 30 }, () => ({ x: rnd(0, W), y: rnd(0, H), v: rnd(6, 16), ph: rnd(0, 6.3), r: rnd(1.2, 2.6) }));
+  // Lavender mist banks drifting slowly from right to left (wrap around)
+  const HAZE_ON = false;              // drifting haze layer: off (the painted haze looks best as it is)
+  const HAZE_SPEED = 14;              // px per second the haze would drift left if turned on
+  let glints = [], moonGlints = [], pops = [], ripples = [];
+  let last = performance.now(), t = 0, running = true, nextRipple = 0, nextPop = 2, dogStart = 0.6;
+  const FLOAT_TIME = 26;
+  const END_FROM = 16, END_DUR = 6;   // from 16 s the last stretch is shortened: it stops at 22 s instead of 26 s
+  // jumps: [start, seconds in the air, height, flips (1 = one forward roll, 0 = just a hop)]
+  //   far back just after leaving the moon / just before the S-bend
+  const JUMPS = [[5.4, 1.3, 120, 1], [8.2, 0.65, 30, 0, 0.75], [11.9, 0.5, 12, 0, 1.1]];   // 5th = how much the dogs float/bounce (default 1)   // then a little hop before the S-bend and a tiny one before the last bend
+  let jumpState = JUMPS.map(() => 0);
+  let bulgeAt = JUMPS.map(() => null);
+  const BULGE_ON = false;             // (tried: stretching the painted river up into a swell at takeoff — taken off)
+  const MOUND_ON = true;               // the blue water mound that swells up under the boat at takeoff (the user likes this one)   // where the water bulged up for each jump (stays put once the boat has left)   // per jump: 0 = before, 1 = in the air, 2 = landed
+  const CROUCH = 0.35;                // seconds the boat dips before the splash throws it up
+  let hearts = [], nextHeart = 0, heartCount = 0;   // hearts float up once the two arrive
+  const HEART_MAX = 12;              // two bursts of 6: from the first bouncing, and again while the dogs turn round                // a short burst of hearts (about 3 seconds), then no more
+  const DOG_TURN_AT = 17.0, DOG_TURN_DUR = 2.0, DOG_TURN_COUNT = 2;   // just the dogs turn round on the spot (between the two sets of bounces)
+  const DOG_TURNS = [DOG_TURN_AT, 20.6];                               // ...and once more right after the second set of bounces
+  // right after the last bend each dog bounces 3 times, then they turn round, then 3 more bounces, quickly, the two taking turns
+  const PUP_HOPS = [15.7, 16.05, 16.4, 19.35, 19.7, 20.05], BIG_HOPS = [15.87, 16.22, 16.57, 19.52, 19.87, 20.22], PUP_HOP_DUR = 0.3, PUP_HOP_HEIGHT = 11;
+  const HANDLE_ON = false;           // the teacup-style handle with paws (tried, taken off)
+  const TURN_AT = 14.2, TURN_DUR = 1.2, TURN_COUNT = 1;   // just after the last bend the whole moon boat spins round quickly (front shows 3 times counting the start), then drifts on to the pool
+
+  // the moon boat with the two dogs, turning round on the spot as one piece (seen a little from above):
+  // the boat narrows as it turns end-on, the dogs swing round its middle (the far one drawn first and a little higher),
+  // and each dog is drawn in the view that matches the way it faces (separate pictures, so nothing gets paper-thin)
+  function drawCrew(sp, d) {
+    const ang = d.turn, c = Math.cos(ang), sn = Math.sin(ang);
+    const ox = -SPIN.crew.w / 2, oy = -SPIN.crew.h * 0.5;
+    const bw = 0.4 + 0.6 * Math.abs(c);                                  // end-on, the crescent looks narrower but never flat
+    const boat = img => { ctx.save(); ctx.scale(bw, 1); ctx.drawImage(img, ox + SPIN.boat.x, oy + SPIN.boat.y); ctx.restore(); };
+    boat(sp.boat);
+    const idx = ((Math.round(ang / (Math.PI / 2)) % 4) + 4) % 4;        // 0 front, 1 side (facing right), 2 back, 3 side (facing left)
+    const dogs = ['big', 'pup'].map(nm => {
+      const L = SPIN[nm], off = ox + L.x + L.w / 2;                       // where it sits along the boat
+      return { nm, L, x: off * c, z: off * sn };                          // z > 0: further away
+    }).sort((p, q) => q.z - p.z);
+    // a little round handle in the middle of the boat, like a teacup ride (seen a little from above), turning with the boat
+    const handle = () => {
+      if (!HANDLE_ON) return;
+      const hy = oy + SPIN.boat.y + 52, rx = 15, ry = 5;
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,236,160,0.9)'; ctx.shadowBlur = 6;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgb(214,170,88)'; ctx.lineWidth = 4;              // post
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(0, hy + 20); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgb(224,184,100)';            // spokes, turning with the boat
+      for (let k = 0; k < 3; k++) {
+        const a = ang + k * Math.PI / 3;
+        ctx.beginPath(); ctx.moveTo(-Math.cos(a) * rx, hy - Math.sin(a) * ry); ctx.lineTo(Math.cos(a) * rx, hy + Math.sin(a) * ry); ctx.stroke();
+      }
+      ctx.lineWidth = 3.2; ctx.strokeStyle = 'rgb(250,226,150)';            // the wheel rim
+      ctx.beginPath(); ctx.ellipse(0, hy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(200,150,70,0.8)';
+      ctx.beginPath(); ctx.ellipse(0, hy + 0.8, rx + 1.6, ry + 1.4, 0, 0.1, Math.PI - 0.1); ctx.stroke();
+      ctx.fillStyle = 'rgb(255,240,190)';                                   // hub
+      ctx.beginPath(); ctx.ellipse(0, hy, 3.2, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // each dog reaches out a front paw and holds the wheel (only while they face this way)
+      if (c > 0.25) {
+        const P = (x, y) => [x * c, y - x * sn * 0.18];
+        ctx.save(); ctx.globalAlpha = Math.min(1, (c - 0.25) / 0.3); ctx.lineCap = 'round';
+        for (const [x0, x1, fur, shade] of [[-25, -13, 'rgb(252,246,234)', 'rgb(226,206,176)'], [21, 12, 'rgb(248,218,178)', 'rgb(218,172,124)']]) {
+          const [bx, by] = P(x1, hy - 1.5);   // just the round paws on the wheel
+          ctx.fillStyle = shade; ctx.beginPath(); ctx.ellipse(bx, by, 4.6, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(bx, by - 0.4, 3.7, 3, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = shade; ctx.lineWidth = 0.7;                       // little toe lines
+          for (const dx of [-1.3, 1.3]) { ctx.beginPath(); ctx.moveTo(bx + dx, by - 2.4); ctx.lineTo(bx + dx, by - 0.9); ctx.stroke(); }
+        }
+        ctx.restore();
+      }
+    };
+    let handleDrawn = false;
+    // (tried: dogs staying upright while only the moon flips — the user prefers them flipping together with the moon)
+    const flipping = false;
+    if (flipping) boat(sp.rim);
+    for (const g of dogs) {
+      if (!handleDrawn && g.z < -0.5) { handle(); handleDrawn = true; }   // dogs swinging to the front go over the handle
+      const own = ang + (g.nm === 'big' ? d.dogTurnBig : d.dogTurnPup);   // boat turn + the dog's own turn on the spot
+      const vi = ((Math.round(own / (Math.PI / 2)) % 4) + 4) % 4;
+      const img = sp[g.nm][vi === 1 || vi === 3 ? 'side' : vi === 2 ? 'back' : 'front'];
+      const squash = own ? 0.84 + 0.16 * Math.abs(Math.cos(2 * own)) : 1;
+      ctx.save();
+      if (flipping) ctx.rotate(-d.spin);
+      ctx.translate(g.x, oy + g.L.y - g.z * 0.18 - (g.nm === 'pup' ? d.pupHop : d.bigHop));
+      ctx.scale(squash * (vi === 3 ? -1 : 1), 1);
+      ctx.drawImage(img, -g.L.w / 2, 0);
+      ctx.restore();
+    }
+    if (!handleDrawn) handle();
+    if (!flipping) boat(sp.rim);
+  }
+  // white spray thrown to the OUTSIDE of each bend while the boat is going round it, in three quick bursts:
+  // [seconds, side (1 = right, -1 = left)]
+  //   S-bend (around ~9.6–10.4 s): outside is left;  big bend (around ~13.8–14.8 s): outside is right
+  const CURVE_SPLASHES = [[9.2, 10.4, -1], [13.4, 15.4, 1]];   // [from, to, side]: sprays continuously the whole way round
+  let sprayAcc = 0;
+  let splashFired = new Set();
+  function heart(x, y, size, a, rot) {
+    if (a <= 0 || size <= 0) return;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(size, size); ctx.globalAlpha = a;
+    ctx.shadowColor = 'rgba(255,170,195,0.9)'; ctx.shadowBlur = 0.6 * size;
+    ctx.beginPath();
+    ctx.moveTo(0, 0.32);
+    ctx.bezierCurveTo(-0.1, 0.22, -0.62, -0.05, -0.52, -0.36);
+    ctx.bezierCurveTo(-0.42, -0.66, -0.06, -0.58, 0, -0.3);
+    ctx.bezierCurveTo(0.06, -0.58, 0.42, -0.66, 0.52, -0.36);
+    ctx.bezierCurveTo(0.62, -0.05, 0.1, 0.22, 0, 0.32);
+    ctx.fillStyle = 'rgb(255,128,160)'; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,235,242,0.85)';            // a small shine
+    ctx.beginPath(); ctx.ellipse(-0.26, -0.33, 0.1, 0.06, -0.6, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  let drops = [];                     // water droplets from the splashes
+  function splash(x, y, s, n, up, spread, size = 1) {
+    for (let i = 0; i < n; i++) {
+      const an = -Math.PI / 2 + rnd(-spread, spread);
+      const v = rnd(0.55, 1) * up * Math.max(s, 0.45);
+      drops.push({ x: x + rnd(-14, 14) * s, y, vx: Math.cos(an) * v, vy: Math.sin(an) * v, age: 0, life: rnd(0.6, 1.0), r: rnd(1.6, 3.2) * Math.max(s, 0.5) * size });
+    }
+  }
+  // rocking through the last two bends (±26°): [start s, end s, swings per second, first lean (1 = right, -1 = left)]
+  // the S-bend further back rocks briskly; the big bend lower right rocks slowly and widely, leaning left first
+  //   each bend first leans toward the inside of the curve:
+  //   small bend after the jump (bulges right, turns left → lean left) /
+  //   S-bend further back (bulges left, turns right → lean right) /
+  //   big bend lower right (bulges right, curls down-left → lean left, slow)
+  //   (the S-bend leans in along the curve, swings back the other way after it, then settles: hz < 0)
+  const ROCKS = [[6.9, 8.6, 0.9, -1], [9.0, 12.8, 0.38, 1], [12.8, 20.0, 0.38, -1, 2.8]], ROCK_ANGLE = 0.45;
+  //   the big bend: leans left (inside) for 2.8 s while turning, then rocks side to side after it
+
+  function star(x, y, r, a, rot, core = '255,255,255', halo = '190,240,255') {
+    if (r <= 0.2 || a <= 0) return;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = a;
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.2);
+    g.addColorStop(0, `rgba(${halo},.55)`); g.addColorStop(1, `rgba(${halo},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgb(${core})`; ctx.beginPath();
+    const w = r * 0.16;
+    for (let k = 0; k < 4; k++) { const an = k * Math.PI / 2; ctx.lineTo(Math.cos(an) * r, Math.sin(an) * r); ctx.lineTo(Math.cos(an + Math.PI / 4) * w, Math.sin(an + Math.PI / 4) * w); }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  function dot(x, y, r, a, rgb) {
+    if (a <= 0 || r <= 0) return;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+    g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(.35, `rgba(${rgb},${a * .45})`); g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 3, 0, 7); ctx.fill();
+  }
+  const ease = k => 1 - Math.pow(1 - k, 3);
+
+  function dogState() {
+    const k = Math.max(0, Math.min(1, (t - dogStart) / FLOAT_TIME));   // stays at the end (lower left) once it arrives
+    let s = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;     // slow start, steady, slow end
+    // after the boat's spin, glide the rest of the way in more briskly (it used to crawl for ages before stopping):
+    // carry on at the same speed and ease to a stop in END_DUR seconds
+    const tr = t - dogStart;
+    if (tr > END_FROM) {
+      const k0 = END_FROM / FLOAT_TIME, s0 = 1 - 2 * Math.pow(1 - k0, 2), v0 = 4 * (1 - k0) / FLOAT_TIME;
+      const u = Math.min(1, (tr - END_FROM) / END_DUR), a = v0 * END_DUR, R = 1 - s0;
+      s = s0 + a * u + (3 * R - 2 * a) * u * u + (a - 2 * R) * u * u * u;
+    }
+    const p = dogAt(s);
+    const scale = 0.1 + 1.14 * Math.pow(s, 0.8);          // a speck in the moonlight, bigger as it comes near
+    const alpha = Math.min(1, k / 0.08);                    // fades in out of the light instead of popping up
+    const resting = tr >= END_FROM + END_DUR;
+    const bob = Math.sin(t * 2.1) * (resting ? 1.8 : 3) * scale;
+    // 手前に来たところで、高くジャンプして空中で前回りに1回転し、着水する
+    // （絵の面の中で回すので、犬がうすっぺらくならない）
+    let jumpIdx = JUMPS.findIndex(([at, dur]) => tr < at + dur);        // the jump that is coming up (or happening now)
+    if (jumpIdx < 0) jumpIdx = JUMPS.length - 1;
+    const [JUMP_AT, JUMP_DUR, JUMP_HEIGHT, FLIPS] = JUMPS[jumpIdx];
+    const jp = (t - dogStart - JUMP_AT) / JUMP_DUR;
+    const jumping = jp > 0 && jp < 1;
+    const e = jumping ? (jp < 0.5 ? 2 * jp * jp : 1 - Math.pow(-2 * jp + 2, 2) / 2) : 0;
+    const spin = jumping ? -e * Math.PI * 2 * FLIPS : 0;
+    const hop = jumping ? 4 * jp * (1 - jp) * JUMP_HEIGHT * Math.max(scale, 0.45) : 0;   // 放物線（遠くで小さくても見えるように）
+    // 跳ぶ直前に、ぐっと沈み込む（ため）
+    const crouchT = -jp * JUMP_DUR;                                     // 跳ぶまでの残り秒数
+    const crouch = crouchT > 0 && crouchT < CROUCH ? Math.sin(Math.PI * (1 - crouchT / CROUCH)) * 10 * Math.max(scale, 0.45) : 0;
+    // 最後の2つのカーブで、舟の底を支点に左右へグラングラン揺れる（だんだん大きく → おさまる）
+    let rock = 0;
+    for (const [from, to, hz, dir, hold] of ROCKS) {
+      const ru = (t - dogStart - from) / (to - from);
+      if (hold) {                           // lean into the curve and hold it while turning, then rock side to side after
+        const tau = t - dogStart - from;
+        if (ru > 0 && ru < 1) {
+          const a = tau < hold
+            ? Math.sin(Math.PI / 2 * Math.min(1, tau / 0.6))                            // ease into the lean, hold it
+            : Math.exp(-0.35 * (tau - hold)) * Math.cos(2 * Math.PI * hz * (tau - hold)); // swing back and forth, settling
+          rock = dir * ROCK_ANGLE * a * Math.min(1, (1 - ru) / 0.15);
+        }
+        continue;
+      }
+      if (hz < 0) {                         // hz < 0 = lean into the curve, swing back the other way after it, then settle
+        const tau = t - dogStart - from;
+        if (ru > 0 && ru < 1) {
+          const attack = Math.sin(Math.PI / 2 * Math.min(1, tau / 0.5));
+          const release = Math.min(1, (1 - ru) / 0.25);   // fade out so it hands over smoothly to the next bend
+          rock = dir * ROCK_ANGLE * attack * release * Math.exp(-0.43 * tau) * Math.sin(2 * Math.PI * -hz * tau) * 1.35;
+        }
+        continue;
+      }
+      // 最初の傾きが一番大きく、だんだんおさまる（最初の向きがはっきり分かるように）
+      // 傾き始めはなめらかに（急ブレーキのようなガクンとした動きにしない）
+      const env = Math.sin(Math.PI / 2 * Math.min(1, ru / 0.12)) * Math.pow(1 - ru, 0.6);
+      if (ru > 0 && ru < 1) rock = dir * env * ROCK_ANGLE * Math.sin(2 * Math.PI * hz * (t - dogStart - from));
+    }
+    const arriving = k >= 0.93;                            // almost stopped (it eases in slowly at the end)
+    // on the last stretch down to the pool, the whole boat spins round twice as it drifts (front → side → back → side → front)
+    // once stopped, the two dogs turn round on the spot by themselves (the pup a beat behind)
+    const dogTurn = delay => {
+      for (const at of DOG_TURNS) {
+        const q = (t - dogStart - at - delay) / DOG_TURN_DUR;
+        if (q <= 0 || q >= 1) continue;
+        const e = q < 0.5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2;
+        return e * Math.PI * 2 * DOG_TURN_COUNT;
+      }
+      return 0;
+    };
+    const hopOf = list => {
+      for (const at of list) {
+        const q = (t - dogStart - at) / PUP_HOP_DUR;
+        if (q > 0 && q < 1) return 4 * q * (1 - q) * PUP_HOP_HEIGHT;
+      }
+      return 0;
+    };
+    // the dogs ride the jump stuck to the boat, and when it lands they bounce up off it: ぴょん
+    let floatUp = 0;
+    // in every jump the dogs stay on the boat in the air; only when it lands do they bounce up off it
+    for (const [at, dur, height, flips, dogK = 1] of JUMPS) {
+      const f = height / 120, q = (tr - at) / dur, after = tr - at - dur;
+      if (after >= 0 && after < 0.9) floatUp = dogK * (flips ? 22 * f : 26 * Math.sqrt(f)) * Math.abs(Math.sin(Math.PI * after / 0.36)) * Math.exp(-3.2 * after);
+    }
+    const pupHop = hopOf(PUP_HOPS) + floatUp * 1.2, bigHop = hopOf(BIG_HOPS) + floatUp;
+    const tq = (t - dogStart - TURN_AT) / TURN_DUR;
+    const te = tq <= 0 || tq >= 1 ? 0 : 1 - Math.pow(1 - tq, 2);   // spins off fast, then settles
+    return { x: p.x, y: p.y + bob - hop + crouch, wy: p.y + bob, tr, scale, alpha, spin, jumping, jumpIdx, jp, rock, arriving,
+             turn: te * Math.PI * 2 * TURN_COUNT, dogTurnBig: dogTurn(0), dogTurnPup: dogTurn(0.25), pupHop, bigHop,
+             tilt: Math.sin(t * 1.6) * (resting ? 0.025 : 0.05), moving: k > 0 && !resting, resting, visible: true };
+  }
+
+  function frame(now, art) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (running) t += dt;
+    const { bg, sp, glow, haze, moonMask } = art;
+    const dog = { width: SPIN.crew.w, height: SPIN.crew.h };   // size of the boat picture (used for placement)
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(bg, 0, 0, W, H);
+    // where a jump takes off, the painted river itself swells up into a mound for a moment (the picture is
+    // stretched upward column by column under the boat), then sinks back
+    if (BULGE_ON) {
+      const d0 = dogState();
+      JUMPS.forEach(([at, dur, height], i) => {
+        const tau = d0.tr - at, f = Math.sqrt(height / 120);
+        if (tau < -0.25 || tau > 0.75) return;
+        if (tau < 0.02 || !bulgeAt[i]) bulgeAt[i] = { x: d0.x, y: d0.wy, s: d0.scale };
+        const A = tau < 0.05 ? Math.sin(Math.PI / 2 * (tau + 0.25) / 0.3) : Math.pow(1 - (tau - 0.05) / 0.7, 2);
+        if (A <= 0.01) return;
+        const { x, y, s } = bulgeAt[i], base = y + 10 * s;
+        const rx = ((95 + 15 * A) * f + 35) * s, hgt = (62 * f + 10) * s * A, reach = hgt * 2.2 + 14 * s;
+        for (let c = -rx; c < rx; c += 2) {
+          const u = c / rx, off = hgt * Math.pow(1 - u * u, 1.6);
+          if (off < 0.4) continue;
+          ctx.drawImage(bg, x + c, base - reach, 2, reach, x + c, base - reach - off, 2, reach + off);
+        }
+        // shade it with light like a rounded swell of the same water: brighter on top, a little deeper at its foot
+        const dome = () => {
+          ctx.beginPath(); ctx.moveTo(x - rx, base);
+          for (let c = -rx; c <= rx; c += 2) { const u = c / rx; ctx.lineTo(x + c, base - hgt * Math.pow(1 - u * u, 1.6)); }
+          ctx.closePath();
+        };
+        ctx.save();
+        dome(); ctx.clip();
+        ctx.globalCompositeOperation = 'screen';
+        const lg = ctx.createRadialGradient(x - rx * 0.15, base - hgt * 0.8, 0, x, base - hgt * 0.5, rx * 0.8);
+        lg.addColorStop(0, `rgba(255,255,255,${0.55 * A})`); lg.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = lg; ctx.fillRect(x - rx, base - hgt - 4, rx * 2, hgt + 8);
+        ctx.globalCompositeOperation = 'multiply';
+        const sg = ctx.createLinearGradient(0, base - hgt * 0.5, 0, base);
+        sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(1, `rgba(150,205,230,${0.55 * A})`);
+        ctx.fillStyle = sg; ctx.fillRect(x - rx, base - hgt, rx * 2, hgt + 2);
+        ctx.restore();
+        ctx.save(); ctx.globalCompositeOperation = 'screen';      // a bright rim along the top
+        ctx.strokeStyle = `rgba(255,255,255,${0.6 * A})`; ctx.lineWidth = 2.2 * s + 0.6;
+        ctx.beginPath();
+        for (let c = -rx * 0.75; c <= rx * 0.75; c += 2) {
+          const u = c / rx, yy = base - hgt * Math.pow(1 - u * u, 1.6) + 1.5 * s;
+          if (c === -rx * 0.75) ctx.moveTo(x + c, yy); else ctx.lineTo(x + c, yy);
+        }
+        ctx.stroke(); ctx.restore();
+      });
+    }
+
+    // 1. (The lavender haze stays as painted in the picture.)
+    if (HAZE_ON) {
+      const hx = -((t * HAZE_SPEED) % W);
+      hctx.globalCompositeOperation = 'copy';
+      hctx.drawImage(haze, hx, 0);
+      hctx.globalCompositeOperation = 'source-over';
+      hctx.drawImage(haze, hx + W, 0);
+      hctx.globalCompositeOperation = 'destination-out';   // keep the haze off the moon wherever it drifts
+      hctx.drawImage(moonMask, 0, 0);
+      ctx.drawImage(hcv, 0, 0);
+    }
+
+    ctx.globalCompositeOperation = 'screen';
+    // 2. A halo breathes around the edge of the moon (follows its real shape)
+    ctx.globalAlpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.9));
+    ctx.drawImage(glow, PARTS.glow.x, PARTS.glow.y);
+    ctx.globalAlpha = 1;
+    if (running && Math.random() < dt * 4) { const [x, y] = PARTS.moon[(Math.random() * PARTS.moon.length) | 0]; moonGlints.push({ x, y, life: rnd(0.8, 1.6), age: 0, r: rnd(5, 10) }); }
+
+    // 3. Glowing motes drift from the moon down the river (small and many, as in the first version)
+    for (const m of motes) {
+      if (running) { m.s += m.v * dt; if (m.s > 1) { m.s -= 1; m.off = rnd(-14, 14); } }
+      const p = lightAt(m.s), side = m.off + 6 * Math.sin(t * 1.4 + m.ph);
+      const x = p.x - Math.sin(p.a) * side, y = p.y + Math.cos(p.a) * side;
+      const fade = Math.min(1, m.s * 8, (1 - m.s) * 6) * (0.65 + 0.35 * Math.sin(t * 3 + m.ph));
+      dot(x, y, m.r, 0.9 * fade, '255,246,190');
+    }
+
+    // 4. Sparkles twinkle on the water, and inside the moon
+    if (running) while (glints.length < 34) { const [x, y] = RIVER[(Math.random() * RIVER.length) | 0]; glints.push({ x, y, life: rnd(1.1, 2.4), age: rnd(0, 0.3), r: rnd(6, 15), rot: rnd(-0.3, 0.3) }); }
+    for (const g of glints) { if (running) g.age += dt; const s = Math.sin(Math.PI * Math.min(1, g.age / g.life)); star(g.x, g.y, g.r * (0.4 + 0.6 * s), s, g.rot + t * 0.4); }
+    for (const g of moonGlints) { if (running) g.age += dt; const s = Math.sin(Math.PI * Math.min(1, g.age / g.life)); star(g.x, g.y, g.r * s, s * 0.9, t * 0.3, '255,255,240', '255,226,120'); }
+    glints = glints.filter(g => g.age < g.life); moonGlints = moonGlints.filter(g => g.age < g.life);
+
+    // 5. The dog floats down on its rock; ripples spread from wherever it is
+    const d = dogState();
+    // ripples only once it is on the water
+    if (running && d.visible && d.scale > 0.4 && t > nextRipple) { ripples.push({ x: d.x, y: d.y + 10 * d.scale, s: d.scale, age: 0 }); nextRipple = t + (d.resting ? 2.4 : 0.9); }
+    ctx.globalCompositeOperation = 'source-over';
+    for (const rp of ripples) {
+      if (running) rp.age += dt;
+      if (rp.age < 0) continue;                // a delayed ring that hasn't started yet
+      const k = Math.min(1, rp.age / 3);
+      const rx = (60 + 70 * k) * rp.s;
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`; ctx.lineWidth = 2.2 * (1 - k) + 0.6;
+      ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rx, rx * 0.32, 0, 0, 7); ctx.stroke();
+    }
+    ripples = ripples.filter(r => r.age < 3);
+    // the river swells up into a little mound under the boat just as a jump throws it up, then sinks back
+    if (MOUND_ON) JUMPS.forEach(([at, dur, height], i) => {
+      const tau = d.tr - at, f = Math.sqrt(height / 120);
+      if (tau < -0.25 || tau > 0.75) return;
+      if (tau < 0.02 || !bulgeAt[i]) bulgeAt[i] = { x: d.x, y: d.wy, s: d.scale };
+      const A = tau < 0.05 ? Math.sin(Math.PI / 2 * (tau + 0.25) / 0.3) : Math.pow(1 - (tau - 0.05) / 0.7, 2);
+      if (A <= 0.01) return;
+      const { x, y, s } = bulgeAt[i], base = y + 8 * s, rx = ((55 + 12 * A) * f + 22) * s, hgt = (58 * f + 8) * s * A;
+      ctx.save();
+      const g = ctx.createLinearGradient(0, base - hgt, 0, base);
+      g.addColorStop(0, `rgba(235,250,255,${0.97 * A})`);
+      g.addColorStop(0.35, `rgba(130,205,236,${0.92 * A})`);
+      g.addColorStop(0.8, `rgba(105,188,226,${0.7 * A})`);
+      g.addColorStop(1, 'rgba(105,188,226,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x - rx, base);
+      ctx.bezierCurveTo(x - rx * 0.45, base, x - rx * 0.4, base - hgt, x, base - hgt);
+      ctx.bezierCurveTo(x + rx * 0.4, base - hgt, x + rx * 0.45, base, x + rx, base);
+      ctx.ellipse(x, base, rx, rx * 0.22, 0, 0, Math.PI);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,255,255,${0.8 * A})`; ctx.lineWidth = 1.6 * s + 0.5;   // a bright line along the top of the swell
+      ctx.beginPath();
+      ctx.moveTo(x - rx * 0.55, base - hgt * 0.55);
+      ctx.bezierCurveTo(x - rx * 0.3, base - hgt * 1.0, x + rx * 0.3, base - hgt * 1.0, x + rx * 0.55, base - hgt * 0.55);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,255,255,${0.9 * A})`;          // a few foam bubbles on top
+      for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.arc(x + k * rx * 0.17, base - hgt * (0.92 - Math.abs(k) * 0.12), (2.6 - Math.abs(k) * 0.5) * s + 0.6, 0, 7); ctx.fill(); }
+      ctx.restore();
+    });
+    if (d.visible) {
+      // the boat's bottom rides on the water line; it turns around its own middle when flipping
+      ctx.save(); ctx.globalAlpha = d.alpha;
+      ctx.translate(d.x, d.y); ctx.rotate(d.rock);              // rocks around the bottom of the boat
+      ctx.translate(0, -dog.height * 0.22 * d.scale);
+      ctx.rotate(d.tilt + d.spin); ctx.scale(d.scale, d.scale);
+      drawCrew(sp, d);
+      ctx.restore();
+    }
+
+    // water droplets: fly up, then fall back with gravity
+    for (const w of drops) {
+      if (running) { w.age += dt; w.vy += 620 * dt * Math.max(d.scale, 0.45); w.x += w.vx * dt; w.y += w.vy * dt; }
+      const a = Math.max(0, 1 - w.age / w.life);
+      ctx.fillStyle = `rgba(235,250,255,${0.95 * a})`;
+      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(150,215,240,${0.35 * a})`;
+      ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 1.8, 0, 7); ctx.fill();
+    }
+    drops = drops.filter(w => w.age < w.life);
+
+    // 6. Little golden sparkles pop around the dog as it floats (and burst out when it twirls)
+    ctx.globalCompositeOperation = 'screen';
+    if (running && d.jumping && jumpState[d.jumpIdx] === 0) {   // takeoff: a spout of water throws the boat up
+      jumpState[d.jumpIdx] = 1;
+      const f = Math.max(0.25, JUMPS[d.jumpIdx][2] / 120);   // smaller hops kick up less water
+      ripples.push({ x: d.x, y: d.y + 10 * d.scale, s: d.scale * 0.9, age: 0 });
+      splash(d.x, d.y + 6 * d.scale, d.scale, Math.round(34 * f), 260 * Math.sqrt(f), 0.35);
+    }
+    CURVE_SPLASHES.forEach(([from, to, side]) => {
+      const u = (t - dogStart - from) / (to - from);
+      if (!running || u < 0 || u > 1) return;
+      // white sparkles stream out sideways from under the moon boat, to the outside only, all through the bend
+      const env = Math.sin(Math.PI * u) ** 0.5, s = d.scale;
+      sprayAcc += 38 * env * dt;
+      while (sprayAcc >= 1) {
+        sprayAcc -= 1;
+        pops.push({ x: d.x + side * rnd(8, 26) * s, y: d.y + rnd(2, 10) * s,
+                    vx: side * rnd(60, 140) * s * (0.6 + 0.4 * env), vy: -rnd(8, 40) * s, age: 0, life: rnd(0.6, 1.0), r: rnd(4, 8) });
+      }
+    });
+    const landed = jumpState.findIndex((st, i) => st === 1 && !(d.jumping && d.jumpIdx === i));
+    if (running && landed >= 0) {                            // splashdown: water flies out, rings and sparkles
+      jumpState[landed] = 2;
+      const f = Math.max(0.25, JUMPS[landed][2] / 120), n = Math.round(18 * f);
+      splash(d.x, d.y + 6 * d.scale, d.scale, Math.round(30 * f), 170 * Math.sqrt(f), 1.1);
+      for (let i = 0; i < (f < 0.5 ? 1 : 3); i++) ripples.push({ x: d.x, y: d.y + 10 * d.scale, s: d.scale * (1 + i * 0.35), age: -i * 0.18 });
+      for (let i = 0; i < n; i++) {
+        const an = (i / n) * Math.PI * 2, rr = rnd(50, 90) * d.scale;
+        pops.push({ x: d.x + Math.cos(an) * rr, y: d.y - 10 * d.scale + Math.sin(an) * rr * 0.45, vy: rnd(-40, -15), age: 0, life: rnd(0.9, 1.6), r: rnd(6, 11) });
+      }
+    }
+    if (running && d.visible && d.scale > 0.45 && t > nextPop) { for (let i = 0; i < 5; i++) pops.push({ x: d.x + rnd(-34, 34) * d.scale, y: d.y + (-30 + rnd(-30, 8)) * d.scale, vy: rnd(-22, -10), age: 0, life: rnd(0.9, 1.5), r: rnd(4, 8) }); nextPop = t + rnd(2.5, 4); }
+    for (const p of pops) {
+      if (running) { p.age += dt; p.y += p.vy * dt; p.x += (p.vx || 0) * dt; }
+      const s = Math.sin(Math.PI * Math.min(1, p.age / p.life));
+      star(p.x, p.y, p.r * s, s, t, '255,252,230', p.vx ? '205,238,255' : '255,215,120');   // sideways spray is white-blue
+    }
+    pops = pops.filter(p => p.age < p.life);
+
+    // 6b. Hearts float up above the two once they come to rest
+    ctx.globalCompositeOperation = 'source-over';
+    if (running && t - dogStart > (heartCount < 6 ? PUP_HOPS[0] : DOG_TURN_AT - 0.2) && heartCount < HEART_MAX && t > nextHeart) {
+      const s = d.scale;
+      // taking turns: one from above the big dog's head, the next from above the pup's (it sits lower, to the right)
+      const fromPup = heartCount % 2 === 0;
+      // (x, y are kept relative to the boat, so the hearts travel along with it)
+      hearts.push({ x: (fromPup ? 25 : -28) * s + rnd(-9, 9) * s, y: -(fromPup ? 55 : 85) * s, vy: -rnd(26, 38) * s, ph: rnd(0, 6.3), size: rnd(11, 17) * s, age: 0, life: rnd(2.4, 3.2) });
+      heartCount++;
+      nextHeart = t + (heartCount % 6 < 4 ? 0.45 : 0.8);
+    }
+    for (const h of hearts) {
+      if (running) { h.age += dt; h.y += h.vy * dt; }
+      const k = h.age / h.life;
+      const a = Math.min(1, k / 0.15) * Math.min(1, (1 - k) / 0.35);
+      heart(d.x + h.x + Math.sin(h.age * 2.4 + h.ph) * 7, d.y + h.y, h.size * (0.7 + 0.3 * Math.min(1, k / 0.15)), a, Math.sin(h.age * 2 + h.ph) * 0.18);
+    }
+    hearts = hearts.filter(h => h.age < h.life);
+    ctx.globalCompositeOperation = 'screen';
+
+    // 7. Fireflies float upward over the whole scene
+    for (const f of dust) {
+      if (running) { f.y -= f.v * dt; f.x += Math.sin(t * 0.7 + f.ph) * 8 * dt; if (f.y < -10) { f.y = H + 10; f.x = rnd(0, W); } }
+      dot(f.x, f.y, f.r, 0.55 + 0.45 * Math.sin(t * 2.2 + f.ph), '255,250,205');
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(n => frame(n, art));
+  }
+
+  const btn = document.getElementById('toggle');
+  btn.addEventListener('click', () => { running = !running; btn.textContent = running ? '一時停止' : '再生'; });
+  document.getElementById('replay').addEventListener('click', () => { dogStart = t + 0.3; pops = []; drops = []; hearts = []; heartCount = 0; nextHeart = 0; jumpState = JUMPS.map(() => 0); bulgeAt = JUMPS.map(() => null); splashFired = new Set(); if (!running) { running = true; btn.textContent = '一時停止'; } });
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { running = false; btn.textContent = '再生'; }
+  // the two Pomeranians (1-year-old cream, 3-month-old apricot) in a crescent-moon boat, as separate pieces
+  const SPIN_FILES = ['spin_boat', 'spin_rim', 'spin_big_front', 'spin_big_side', 'spin_big_back', 'spin_pup_front', 'spin_pup_side', 'spin_pup_back'];
+  Promise.all([load('bg.png'), load('moon_glow.png'), load('haze.png'), load('moon_mask.png'), ...SPIN_FILES.map(f => load(f + '.png'))])
+    .then(([bg, glow, haze, moonMask, boat, rim, bf, bs, bb, pf, ps, pb]) => {
+      const sp = { boat, rim, big: { front: bf, side: bs, back: bb }, pup: { front: pf, side: ps, back: pb } };
+      requestAnimationFrame(n => frame(n, { bg, sp, glow, haze, moonMask }));
+    });
+})();
+</script>

@@ -22,6 +22,12 @@ class Parasol{
     endShape();
     strokeWeight(1);   
     fill('lightblue');
+    // at night there is no sun, so the parasol folds up (it opens again in the morning)
+    const fold = typeof night === 'undefined' ? 0 : night.fold();
+    push();
+    translate(this.x - 15, this.y - 77);                 // fold in towards the top of the parasol
+    scale(1 - 0.78 * fold, 1 + 0.25 * fold);
+    translate(-(this.x - 15), -(this.y - 77));
     beginShape();
       vertex(this.x-15,this.y-77);
       bezierVertex(this.x-20,this.y-75,this.x-45,this.y-75,this.x-75,this.y-50);
@@ -31,6 +37,7 @@ class Parasol{
       bezierVertex(this.x+20,this.y-58,this.x+30,this.y-58,this.x+43,this.y-55);
       bezierVertex(this.x+20,this.y-73,this.x+8,this.y-73,this.x-15,this.y-77);
     endShape();
+    pop();
     // drone
     ellipse(this.x,this.y-25,39,8);
     strokeWeight(0.5);
