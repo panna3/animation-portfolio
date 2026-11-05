@@ -1,71 +1,55 @@
+// Panna, drawn by the user in MS Paint (panna_drawn.png), used exactly as drawn: only the background was
+// made transparent (cutout_panna.py). Shown at the size she was drawn, so every line stays as it is.
+// She blinks now and then: for a moment white lids come down over her two drawn eyes, leaving a little
+// closed-eye line in the same light blue.
+// (x, y) is the middle of her paws on the ground.
 class Panna{
-  constructor(x,y){
+  // where her eyes are in the picture (measured from panna_drawn.png): [left, top, right, bottom]
+  static EYES = [[42, 64, 57, 77], [75, 64, 92, 78]];
+  constructor(x,y,img){
     this.x = x;
     this.y = y;
+    this.img = img;
+    this.t = 0;
+    this.blinkAt = -9;
+    this.nextBlink = 2;
+    this.twice = false;
+  }
+  // how far the lids are closed: down in 0.08 s, shut for 0.06 s, up in 0.1 s
+  lid() {
+    const d = this.t - this.blinkAt;
+    if (d < 0) return 0;
+    if (d < 0.08) return d / 0.08;
+    if (d < 0.14) return 1;
+    if (d < 0.24) return 1 - (d - 0.14) / 0.1;
+    return 0;
   }
   show(){
-   fill(255);
-   stroke(230,230,250);
-   let radius = 200;
-    //tail
-    for(let i = 5; i < radius;i++){
-      let r = map(i,0,radius,0,radius*2)*0.6;
-      let x = this.x+55 + cos(r+i)*r/12;
-      let y = this.y+72 + sin(r+i)*r/12;
-      circle(x,y,3);
+    const ix = round(this.x - this.img.width / 2), iy = round(this.y - this.img.height);
+    push();
+    noSmooth();                                   // keep the drawn pixels crisp
+    image(this.img, ix, iy);
+    const c = this.lid();
+    if (c > 0) {
+      noStroke();
+      for (const [l, t, r, b] of Panna.EYES) {
+        fill(255);
+        rect(ix + l, iy + t, r - l, ceil((b - t) * c) + 1);     // the lid coming down
+        if (c > 0.6) {                                          // shut: a small curved line where the eye was
+          noFill(); stroke(153, 217, 234); strokeWeight(2.5);
+          arc(ix + (l + r) / 2, iy + b - 5, r - l - 2, 7, 0.1 * PI, 0.9 * PI);
+          noStroke();
+        }
+      }
     }
-    //face
-    beginShape();
-      vertex(this.x,this.y);
-      bezierVertex(this.x-10, this.y-30, this.x-20, this.y-20, this.x-25,this.y+5);//left ear
-      bezierVertex(this.x-65, this.y+70, this.x+80, this.y+70, this.x+45,this.y+5);
-      bezierVertex(this.x+30, this.y-30, this.x+30, this.y-20, this.x+20,this.y);//right ear
-      bezierVertex(this.x+15,this.y-3,this.x+12,this.y-3,this.x,this.y);
-    endShape(); 
-    //left face hair
-    beginShape();
-      vertex(this.x-31,this.y+20);
-      bezierVertex(this.x-40,this.y+40,this.x-38,this.y+38,this.x-30,this.y+30);
-      bezierVertex(this.x-38,this.y+50,this.x-38,this.y+50,this.x-25,this.y+40);
-    endShape();
-    //right face hair
-    beginShape();
-      vertex(this.x+50,this.y+20);
-      bezierVertex(this.x+57,this.y+40,this.x+57,this.y+38,this.x+48,this.y+30);
-      bezierVertex(this.x+56,this.y+50,this.x+56,this.y+50,this.x+43,this.y+40);
-    endShape();
-    //right leg
-    beginShape();
-      vertex(this.x+30, this.y+80);
-      bezierVertex(this.x,this.y+90,this.x,this.y+110,this.x+40,this.y+85);
-    endShape();
-    //body
-    beginShape();
-      vertex(this.x-10, this.y+52);
-      bezierVertex(this.x-80, this.y+115, this.x+150, this.y+110, this.x+30,this.y+50);
-    endShape();
-    //right hand
-    beginShape();
-      vertex(this.x, this.y+80);
-      bezierVertex(this.x-20, this.y+110, this.x+10,this.y+110, this.x+10,this.y+80);
-    endShape();
-    //left hand
-    beginShape();
-      vertex(this.x-20, this.y+80);
-      bezierVertex(this.x-40, this.y+110, this.x-20,this.y+110, this.x-5,this.y+80);
-    endShape();
-    //left leg
-    beginShape();
-      vertex(this.x+50, this.y+85);
-      bezierVertex(this.x+20,this.y+95,this.x+20,this.y+120,this.x+65,this.y+85);
-    endShape();
-
-    fill('black');
-    circle(this.x-7,this.y+21,5);//left eye
-    circle(this.x+13,this.y+21,5);//right eye
-    circle(this.x+3,this.y+30,5);//nose
+    pop();
   }
   update(){
-    
+    this.t += deltaTime / 1000;
+    if (this.t > this.nextBlink) {                // every 3-5 s, and now and then a double blink
+      this.blinkAt = this.t;
+      this.twice = !this.twice && random() < 0.3;   // (never three in a row)
+      this.nextBlink = this.t + (this.twice ? 0.32 : 3 + random(2));
+    }
   }
 }
