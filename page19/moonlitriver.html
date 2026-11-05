@@ -1,3 +1,6 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Moonlit River</title>
 <style>
 /* Layout: the illustration fills the screen as one square stage; two quiet controls sit under it */
@@ -20,6 +23,7 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   <div class="controls">
     <button id="replay">もう一度流す</button>
     <button id="toggle">一時停止</button>
+    <button id="sound">♪ 音を出す</button>
   </div>
 </div>
 
@@ -536,6 +540,20 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   btn.addEventListener('click', () => { running = !running; btn.textContent = running ? '一時停止' : '再生'; });
   document.getElementById('replay').addEventListener('click', () => { dogStart = t + 0.3; pops = []; drops = []; hearts = []; heartCount = 0; nextHeart = 0; jumpState = JUMPS.map(() => 0); bulgeAt = JUMPS.map(() => null); splashFired = new Set(); if (!running) { running = true; btn.textContent = '一時停止'; } });
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { running = false; btn.textContent = '再生'; }
+  // sound: the music-box tune with its effects (music.mp3, timed to the dogs' trip; its 0 s is the page's
+  // start, when the dogs set off 0.6 s in). Browsers only allow sound after a tap, so it waits for the button,
+  // then follows pause and "もう一度流す", and stays quiet once the trip is over.
+  const music = new Audio('music.mp3'), sndBtn = document.getElementById('sound');
+  let soundOn = false;
+  sndBtn.addEventListener('click', () => { soundOn = !soundOn; sndBtn.textContent = soundOn ? '♪ 音を消す' : '♪ 音を出す'; syncSound(); });
+  function syncSound() {
+    const at = t - dogStart + 0.6;
+    const want = soundOn && running && at >= 0 && at < (music.duration || 27) - 0.05;
+    if (!want) { if (!music.paused) music.pause(); return; }
+    if (music.paused || Math.abs(music.currentTime - at) > 0.25) music.currentTime = at;
+    if (music.paused) music.play().catch(() => {});
+  }
+  setInterval(syncSound, 200);
   // the two Pomeranians (1-year-old cream, 3-month-old apricot) in a crescent-moon boat, as separate pieces
   const SPIN_FILES = ['spin_boat', 'spin_rim', 'spin_big_front', 'spin_big_side', 'spin_big_back', 'spin_pup_front', 'spin_pup_side', 'spin_pup_back'];
   Promise.all([load('bg.png'), load('moon_glow.png'), load('haze.png'), load('moon_mask.png'), ...SPIN_FILES.map(f => load(f + '.png'))])
